@@ -14,4 +14,4 @@ Organizes the applications in the GNOME Shell Dashboard into appropriate categor
 
 1. Clone|download repository
 2. Open terminal and give permission **chmod +x gnome-dash-fix-reload.sh**
-3.  And run **./gnome-dash-fix-reload.sh**
+3.  And run **./gnome-dash-fix-reload.sh apply**
