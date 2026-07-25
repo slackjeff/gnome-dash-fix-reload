@@ -3,24 +3,24 @@
 # Author: Jefferson Carneiro <slackjeff@slackjeff.com.br>
 # License: GPLv3
 #
-# Organizes the applications in the GNOME Shell Dashboard into
-# appropriate categories and following the FreeDesktop standard for
-# categorization.
+# GNOME Shell App Folder Organizer
+# Uses FreeDesktop categories.
 #===================================================================#
+
 set -e
 
 #================================#
 # Global
 #================================#
-export default_folders=$(gsettings list-schemas | grep org.gnome.desktop.app-folders)
+
+SCHEMA="org.gnome.desktop.app-folders"
+BASE_PATH="/org/gnome/desktop/app-folders/folders"
+
 
 #================================#
-# Set folders here
+# Folder configuration
 #================================#
-# Define the folders to be used for organizing applications in GNOME.
-# Each item in the list below represents an application category.
-# These categories are used to group applications in the GNOME app dashboard
-# (e.g., "Accessories", "Games", "Internet", etc.).
+
 folders=(
     "accessories"
     "games"
@@ -34,9 +34,8 @@ folders=(
     "universal-access"
 )
 
-# Categories mapping for auto-apply functionality
-declare -A categories
-categories=(
+
+declare -A categories=(
     ["accessories"]="Utility"
     ["games"]="Game"
     ["graphics"]="Graphics"
@@ -49,58 +48,162 @@ categories=(
     ["universal-access"]="Accessibility"
 )
 
+
+declare -A names=(
+    ["accessories"]="Accessories"
+    ["games"]="Games"
+    ["graphics"]="Graphics"
+    ["internet"]="Internet"
+    ["office"]="Office"
+    ["development"]="Development"
+    ["science"]="Science"
+    ["sound---video"]="Sound & Video"
+    ["system-tools"]="System Tools"
+    ["universal-access"]="Universal Access"
+)
+
+
 #================================#
 # Functions
 #================================#
-function HELP()
+
+HELP()
 {
-    echo "Usage:"
-    echo " -a, apply  - Organizing applications to folders"
-    echo " -r, revert - Revert to default"
-    echo " -aa, auto-apply - Auto-apply with enhanced folder configuration"
+    cat <<EOF
+
+Usage:
+
+  $0 -a       Create folders
+  $0 -aa      Create folders + assign applications
+  $0 -r       Remove folders
+
+EOF
     exit 0
 }
 
-function APPLY_FOLDERS()
+
+GET_APPS()
 {
-    # Convert array to the correct format for gsettings
-    folders_string=$(printf "'%s', " "${folders[@]}" | sed 's/, $//')
+    local category="$1"
+    local apps=()
 
-    # Apply to gsettings
-    gsettings set $default_folders folder-children "[$folders_string]"
-}
+    local dirs=(
+        "/usr/share/applications"
+        "/var/lib/flatpak/exports/share/applications"
+        "$HOME/.local/share/flatpak/exports/share/applications"
+        "$HOME/.local/share/applications"
+    )
 
-function AUTO_APPLY_FOLDERS()
-{
-    # Create and configure each folder
-    for folder in "${folders[@]}"; do
-        # Capitalize folder name for display
-        display_name="$(tr '[:lower:]' '[:upper:]' <<< ${folder:0:1})${folder:1}"
-        category=${categories[$folder]}
+    for dir in "${dirs[@]}"; do
 
-        # Set folder name
-        gsettings set $default_folders.folder:/org/gnome/desktop/app-folders/folders/$folder/ name "$display_name"
-        # Assign category to folder
-        gsettings set $default_folders.folder:/org/gnome/desktop/app-folders/folders/$folder/ categories "['$category']"
+        [ -d "$dir" ] || continue
+
+        while IFS= read -r file; do
+
+            if grep -q "^Categories=.*${category};" "$file"; then
+                apps+=("$(basename "$file")")
+            fi
+
+        done < <(find "$dir" -name "*.desktop" 2>/dev/null)
+
     done
 
-    # Apply all folders
-    folders_string=$(printf "'%s', " "${folders[@]}" | sed 's/, $//')
-    gsettings set $default_folders folder-children "[$folders_string]"
 
-    echo "Auto-apply completed successfully!"
-    echo "Folders configured with proper names and categories."
+    if [ "${#apps[@]}" -gt 0 ]; then
+        printf "["
+        printf '"%s",' "${apps[@]}" | sed 's/,$//'
+        printf "]"
+    else
+        printf "[]"
+    fi
 }
 
-function REVERT_FOLDERS()
+CREATE_FOLDER()
 {
-    # Revert
-    gsettings reset "$default_folders" folder-children
+    local folder="$1"
+    local name="$2"
+    local category="$3"
+
+    local path="$SCHEMA.folder:$BASE_PATH/$folder/"
+
+    apps=$(GET_APPS "$category")
+
+
+    echo "Creating: $name"
+
+    gsettings set "$path" name "$name"
+
+    gsettings set "$path" categories "['$category']"
+
+    gsettings set "$path" apps "$apps"
 }
 
-case $1 in
-    -a|apply) APPLY_FOLDERS     ;;
-    -r|revert) REVERT_FOLDERS ;;
-    -aa|auto-apply) AUTO_APPLY_FOLDERS ;;
-    *) HELP ;;
+
+APPLY_FOLDERS()
+{
+    folders_list=$(printf "'%s'," "${folders[@]}")
+    folders_list="[${folders_list%,}]"
+
+    gsettings set \
+        "$SCHEMA" \
+        folder-children \
+        "$folders_list"
+
+    echo "Folders enabled."
+}
+
+
+AUTO_APPLY()
+{
+    for folder in "${folders[@]}"; do
+
+        CREATE_FOLDER \
+            "$folder" \
+            "${names[$folder]}" \
+            "${categories[$folder]}"
+
+    done
+
+
+    APPLY_FOLDERS
+
+    echo
+    echo "GNOME folders configured successfully."
+}
+
+
+REVERT()
+{
+    gsettings reset \
+        "$SCHEMA" \
+        folder-children
+
+    echo "Folders removed."
+}
+
+
+#================================#
+# Main
+#================================#
+
+case "$1" in
+
+    -a|apply)
+        APPLY_FOLDERS
+        ;;
+
+    -aa|auto-apply)
+        AUTO_APPLY
+        ;;
+
+    -r|revert)
+        REVERT
+        ;;
+
+    *)
+        HELP
+        ;;
 esac
+
+# Reload
+gsettings reset org.gnome.shell app-picker-layout
