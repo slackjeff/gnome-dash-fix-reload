@@ -36,19 +36,19 @@ chmod +x gnome-dash-fix-reload.sh
 3. Apply the GNOME folders configuration:
 
 ```bash
-./gnome-dash-fix-reload.sh apply
+./gnome-dash-fix-reload.sh -a
 ```
 
 For automatic folder creation and application assignment:
 
 ```bash
-./gnome-dash-fix-reload.sh auto-apply
+./gnome-dash-fix-reload.sh -aa
 ```
 
 To restore the default GNOME layout:
 
 ```bash
-./gnome-dash-fix-reload.sh revert
+./gnome-dash-fix-reload.sh -r
 ```
 
 ## Requirements
